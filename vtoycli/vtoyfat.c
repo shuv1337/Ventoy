@@ -32,9 +32,16 @@ static int g_disk_fd = 0;
 
 static int vtoy_disk_read(uint32 sector, uint8 *buffer, uint32 sector_count)
 {
-    lseek(g_disk_fd, sector * 512, SEEK_SET);
-    read(g_disk_fd, buffer, sector_count * 512);
-    
+    off_t offset = (off_t)sector * 512;
+    if (lseek(g_disk_fd, offset, SEEK_SET) == (off_t)-1)
+    {
+        return 0;
+    }
+    ssize_t n = read(g_disk_fd, buffer, (size_t)sector_count * 512);
+    if (n != (ssize_t)(sector_count * 512))
+    {
+        return 0;
+    }
     return 1;
 }
 

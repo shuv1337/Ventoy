@@ -82,24 +82,33 @@ int fatfs_init(struct fatfs *fs)
     if (sizeof(struct fat_dir_entry) != FAT_DIR_ENTRY_SIZE)
         return FAT_INIT_STRUCT_PACKING;
 
-    // Check the partition type code
-    switch(fs->currentsector.sector[PARTITION1_TYPECODE_LOCATION])
+    // Check if sector 0 is already a FAT boot sector (VBR)
+    if ((fs->currentsector.sector[0] == 0xEB || fs->currentsector.sector[0] == 0xE9) &&
+        (memcmp(&fs->currentsector.sector[0x36], "FAT", 3) == 0 || memcmp(&fs->currentsector.sector[0x52], "FAT32", 5) == 0))
     {
-        case 0x0B:
-        case 0x06:
-        case 0x0C:
-        case 0x0E:
-        case 0x0F:
-        case 0x05:
-            valid_partition = 1;
-        break;
-        case 0x00:
-            valid_partition = 0;
-            break;
-        default:
-            if (fs->currentsector.sector[PARTITION1_TYPECODE_LOCATION] <= 0x06)
+        valid_partition = 0;
+    }
+    else
+    {
+        // Check the partition type code
+        switch(fs->currentsector.sector[PARTITION1_TYPECODE_LOCATION])
+        {
+            case 0x0B:
+            case 0x06:
+            case 0x0C:
+            case 0x0E:
+            case 0x0F:
+            case 0x05:
                 valid_partition = 1;
-        break;
+            break;
+            case 0x00:
+                valid_partition = 0;
+                break;
+            default:
+                if (fs->currentsector.sector[PARTITION1_TYPECODE_LOCATION] <= 0x06)
+                    valid_partition = 1;
+            break;
+        }
     }
 
     // Read LBA Begin for the file system

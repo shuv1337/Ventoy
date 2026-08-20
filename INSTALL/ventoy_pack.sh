@@ -54,11 +54,7 @@ sign_efi() {
     printf "### %-64s  success\n" "$efi"
 }
 
-if [ "$1" = "CI" ]; then
-    OPT='-dR'
-else
-    OPT='-a'
-fi
+OPT='-r --no-preserve=ownership,mode'
 
 dos2unix -q ./tool/ventoy_lib.sh
 dos2unix -q ./tool/VentoyWorker.sh
@@ -206,21 +202,23 @@ sign_efi $tmpmnt/ventoy/wimboot.i386.efi.xz
 sign_efi $tmpmnt/ventoy/wimboot.x86_64.xz
 
 #inject Ventoy Grub sign sha256 value into VtoyShim
-grub_sha256=$(sha256sum $tmpmnt/EFI/BOOT/grubx64_real.efi | awk '{print $1}')
-magic_cnt=$(hexdump -C $tmpmnt/EFI/BOOT/fbx64.efi | grep '26 26 26 26 26 26 26 26' | wc -l)
-if [ $magic_cnt -ne 1 ]; then
-    echo "hash magic duplicate"
-    exit 1
+if [ -f $tmpmnt/EFI/BOOT/fbx64.efi ]; then
+    grub_sha256=$(sha256sum $tmpmnt/EFI/BOOT/grubx64_real.efi | awk '{print $1}')
+    magic_cnt=$(hexdump -C $tmpmnt/EFI/BOOT/fbx64.efi | grep '26 26 26 26 26 26 26 26' | wc -l)
+    if [ $magic_cnt -ne 1 ]; then
+        echo "hash magic duplicate"
+        exit 1
+    fi
+    magic_off_hex=$(hexdump -C $tmpmnt/EFI/BOOT/fbx64.efi | grep '26 26 26 26 26 26 26 26' | awk '{print $1}')
+    magic_off=$(printf '%u' "0x${magic_off_hex}")
+
+    echo_cmd=$(echo $grub_sha256 | sed 's/\(..\)/\\x\1/g')
+
+    echo Ventoy Grub hash $grub_sha256
+    echo -en "$echo_cmd" | dd bs=1 count=32 of=$tmpmnt/EFI/BOOT/fbx64.efi seek=$magic_off conv=notrunc status=none
+
+    sign_efi $tmpmnt/EFI/BOOT/fbx64.efi
 fi
-magic_off_hex=$(hexdump -C $tmpmnt/EFI/BOOT/fbx64.efi | grep '26 26 26 26 26 26 26 26' | awk '{print $1}')
-magic_off=$(printf '%u' "0x${magic_off_hex}")
-
-echo_cmd=$(echo $grub_sha256 | sed 's/\(..\)/\\x\1/g')
-
-echo Ventoy Grub hash $grub_sha256
-echo -en "$echo_cmd" | dd bs=1 count=32 of=$tmpmnt/EFI/BOOT/fbx64.efi seek=$magic_off conv=notrunc status=none
-
-sign_efi $tmpmnt/EFI/BOOT/fbx64.efi
 
 
 umount $tmpmnt && rm -rf $tmpmnt
@@ -260,7 +258,8 @@ cp $OPT ../LinuxGUI/WebUI $tmpdir/
 sed 's/.*SCRIPT_DEL_THIS \(.*\)/\1/g' -i $tmpdir/WebUI/index.html
 
 #32MB disk img
-dd status=none if=$LOOP of=$tmpdir/ventoy/ventoy.disk.img bs=512 count=$VENTOY_SECTOR_NUM skip=$part2_start_sector
+PART2=$(get_disk_part_name $LOOP 2)
+dd status=none if=$PART2 of=$tmpdir/ventoy/ventoy.disk.img bs=512 count=$VENTOY_SECTOR_NUM
 
 
 #4k image

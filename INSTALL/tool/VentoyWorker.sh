@@ -343,7 +343,11 @@ if [ "$MODE" = "install" -a -z "$NONDESTRUCTIVE" ]; then
     # check and umount
     check_umount_disk "$DISK"
 
-    xzcat ./ventoy/ventoy.disk.img.xz | dd status=none conv=fsync of=$DISK bs=512 count=$VENTOY_SECTOR_NUM seek=$part2_start_sector
+    if [ -b "$PART2" ]; then
+        xzcat ./ventoy/ventoy.disk.img.xz | dd status=none conv=fsync of=$PART2 bs=512 count=$VENTOY_SECTOR_NUM
+    else
+        xzcat ./ventoy/ventoy.disk.img.xz | dd status=none conv=fsync of=$DISK bs=512 count=$VENTOY_SECTOR_NUM seek=$part2_start_sector
+    fi
 
     #test UUID
     testUUIDStr=$(vtoy_gen_uuid | hexdump -C)
